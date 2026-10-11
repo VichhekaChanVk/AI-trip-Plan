@@ -1,0 +1,156 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 210 40% 98%; /* #F8FAFC */
+    --foreground: 222 47% 11%; /* #0F172A */
+    --card: 0 0% 100%;
+    --card-foreground: 222 47% 11%;
+    --primary: 222 47% 11%; /* slate-900 */
+    --primary-foreground: 210 40% 98%;
+    --accent: 160 84% 39%; /* #10B981 emerald */
+    --accent-foreground: 0 0% 100%;
+    --muted: 210 40% 96%;
+    --muted-foreground: 215 16% 47%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+    --border: 214 32% 91%; /* #E2E8F0 */
+    --input: 214 32% 91%;
+    --ring: 160 84% 39%;
+  }
+
+  * {
+    @apply border-border;
+  }
+  html {
+    -webkit-font-smoothing: antialiased;
+  }
+  body {
+    @apply bg-background text-foreground font-sans;
+  }
+}
+
+/* ---------- Motion ---------- */
+@keyframes wf-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes wf-fade-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+@keyframes wf-pop-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.3);
+  }
+  70% {
+    transform: scale(1.15);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+@keyframes wf-shimmer {
+  to {
+    background-position: -200% 0;
+  }
+}
+
+@layer utilities {
+  /* `backwards` fill: the start frame applies during the stagger delay, but nothing lingers
+     afterwards, so hover/active transforms keep working. --i is the stagger index. */
+  .animate-fade-up {
+    animation: wf-fade-up 0.5s cubic-bezier(0.22, 1, 0.36, 1) backwards;
+    animation-delay: calc(var(--i, 0) * 70ms);
+  }
+  .animate-fade-in {
+    animation: wf-fade-in 0.4s ease-out backwards;
+    animation-delay: calc(var(--i, 0) * 70ms);
+  }
+  .lift {
+    transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+  }
+  .lift:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px -10px rgba(15, 23, 42, 0.18);
+  }
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+/* Leaflet custom markers */
+.wf-marker {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 9999px;
+  background: #0f172a;
+  color: #fff;
+  font-size: 12px;
+  font-weight: 600;
+  border: 2px solid #fff;
+  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.35);
+  cursor: pointer;
+  transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1), background 0.2s ease, opacity 0.2s ease;
+  animation: wf-pop-in 0.45s cubic-bezier(0.34, 1.56, 0.64, 1) backwards;
+}
+.wf-marker:hover {
+  transform: scale(1.15);
+}
+.wf-marker.is-active {
+  background: #10b981;
+  transform: scale(1.35);
+  z-index: 10;
+}
+.wf-marker.is-dim {
+  opacity: 0.45;
+}
+.mapboxgl-popup-content {
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-size: 12px;
+  font-family: inherit;
+}
+
+/* Reduced motion: keep soft opacity fades (no movement, scaling, staggering or looping). */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  .animate-fade-up,
+  .animate-fade-in,
+  .wf-marker {
+    animation: wf-fade-in 0.3s ease-out backwards !important;
+  }
+  .lift:hover,
+  .wf-marker:hover,
+  .wf-marker.is-active {
+    transform: none;
+  }
+  .active\:scale-95:active,
+  .active\:scale-\[0\.97\]:active,
+  .active\:scale-\[0\.98\]:active {
+    transform: none;
+  }
+  [class*="wf-shimmer"] {
+    animation: none !important;
+  }
+}
