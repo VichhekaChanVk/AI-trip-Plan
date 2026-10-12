@@ -20,6 +20,14 @@ model Trip {
   centerLng      Float    @map("center_lng")
   summary        String?
   createdAt      DateTime @default(now()) @map("created_at")
+  // JSON: [{ name, label, lat, lng }] - one entry per city, in visiting order
+  destinations   String   @default("[]")
+  // JSON string arrays / flags chosen on the form
+  needs          String   @default("[]")
+  hiddenGems     Boolean  @default(false) @map("hidden_gems")
+  inspiration    String?
+  // JSON: PackingList (generated on demand)
+  packingList    String?  @map("packing_list")
 
   items ItineraryItem[]
 
@@ -42,6 +50,9 @@ model ItineraryItem {
   estimatedCost  Float  @default(0) @map("estimated_cost")
   estimatedHours Float  @default(1) @map("estimated_hours")
   transitNote    String? @map("transit_note")
+  transitCost    Float  @default(0) @map("transit_cost") // USD pp to get here from previous stop
+  indoor         Boolean @default(false)                  // mostly sheltered (used by weather-aware planning)
+  city           String?                                  // which city of a multi-city trip
 
   trip Trip @relation(fields: [tripId], references: [id], onDelete: Cascade)
 

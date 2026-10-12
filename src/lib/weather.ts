@@ -137,3 +137,22 @@ export function summarizeWeather(b: WeatherBundle) {
   const c = b.current;
   return `${c.tempC}°C, ${c.description} (H ${c.highC}° / L ${c.lowC}°, humidity ${c.humidity}%)`;
 }
+
+export function forecastForDate(bundle: WeatherBundle | null | undefined, date: string): DayForecast | undefined {
+  return bundle?.forecast.find((d) => d.date === date);
+}
+
+export type WeatherKind = "wet" | "hot" | "cold" | "fine";
+
+export function weatherKind(f: DayForecast): WeatherKind {
+  if (f.precipChance >= 60 || ["rain", "drizzle", "thunder", "snow"].includes(f.icon)) return "wet";
+  if (f.highC >= 33) return "hot";
+  if (f.highC <= 8) return "cold";
+  return "fine";
+}
+
+/** One line for the prompt, e.g. "Rain, 18-24°C, 90% chance of rain". */
+export function describeForecast(f?: DayForecast): string {
+  if (!f) return "no forecast available (use typical seasonal weather, do not claim a forecast)";
+  return `${f.condition}, ${f.lowC}-${f.highC}°C, ${f.precipChance}% chance of rain`;
+}

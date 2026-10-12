@@ -97,7 +97,7 @@ export function WeatherBanner({ lat, lng, selectedDate }: { lat: number; lng: nu
             <Wind className="h-3 w-3" aria-hidden /> {current.windKph} km/h
           </Badge>
           {dayForecast && (
-            <Badge variant="emerald">
+            <Badge key={dayForecast.date} variant="emerald" className="animate-fade-in">
               <Thermometer className="h-3 w-3" aria-hidden /> This day: {dayForecast.highC}° / {dayForecast.lowC}° ·{" "}
               {dayForecast.condition} · {dayForecast.precipChance}% rain
             </Badge>
