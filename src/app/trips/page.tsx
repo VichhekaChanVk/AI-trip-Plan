@@ -34,7 +34,8 @@ export default async function TripsPage() {
       </div>
 
       {trips.length === 0 ? (
-        <Card className="p-10 text-center">
+        <Card className="animate-fade-up p-10 text-center">
+          <MapPin className="wf-bob mx-auto mb-3 h-8 w-8 text-accent" aria-hidden />
           <p className="font-medium">No trips yet</p>
           <p className="mt-1 text-sm text-muted-foreground">Generate your first itinerary and it will show up here.</p>
           <Button asChild className="mt-5">

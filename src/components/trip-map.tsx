@@ -52,7 +52,7 @@ export default function TripMap({ items, center, activeId, onSelect }: Props) {
 
     const pts = items.map((i) => [i.lat, i.lng] as L.LatLngTuple);
     if (pts.length > 1) {
-      L.polyline(pts, { color: "#0f172a", weight: 3, opacity: 0.6, dashArray: "6 8" }).addTo(group);
+      L.polyline(pts, { color: "#0f172a", weight: 3, opacity: 0.6, dashArray: "6 8", className: "wf-route" }).addTo(group);
     }
 
     items.forEach((item, i) => {
