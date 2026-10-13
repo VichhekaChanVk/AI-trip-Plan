@@ -1,23 +1,84 @@
 import { NextResponse } from "next/server";
 import { randomUUID } from "crypto";
 import { cookies } from "next/headers";
-import { generateRequestSchema } from "@/lib/schema";
-import { generateItinerary } from "@/lib/generate";
+import { generateRequestSchema, type GenerateRequest } from "@/lib/schema";
+import { generateItinerary, type PlanContext, type PlannedItinerary } from "@/lib/generate";
 import { getWeather, summarizeWeather } from "@/lib/weather";
 import { buildDayPlans, loadForecasts, resolveCities } from "@/lib/context";
 import { prisma } from "@/lib/prisma";
 import { USER_COOKIE, userCookieOptions } from "@/lib/user";
 import { addDays, formatCost } from "@/lib/utils";
+import { AppError, classifyError, errorBody, statusFor, type ErrorCode } from "@/lib/errors";
+import { formatIssues, validateItinerary } from "@/lib/validator";
 
-export const maxDuration = 60;
+export const maxDuration = 60; // must be a literal for Next.js; keep MAX_DURATION_MS in sync
 export const dynamic = "force-dynamic";
 
+const MAX_DURATION_MS = 60_000;
+// Time kept free after the AI finishes: weather fallback + DB save + response.
+const SAVE_RESERVE_MS = 8_000;
+// Max time from request start until the last AI attempt must be over. Env can lower it, never exceed the cap.
+const AI_BUDGET_MS = Math.min(Number(process.env.AI_TIMEOUT_MS) || 50_000, MAX_DURATION_MS - SAVE_RESERVE_MS);
+const MAX_ATTEMPTS = 2; // one retry when the output is unusable or fails validation
+const MIN_TIME_FOR_RETRY_MS = 10_000;
+
+function fail(code: ErrorCode, status?: number) {
+  return NextResponse.json(errorBody(code), { status: status ?? statusFor(code) });
+}
+
+/** Runs `run` with an AbortSignal. On timeout the signal fires (stops the LLM call) and AI_TIMEOUT is thrown. */
+function withTimeout<T>(run: (signal: AbortSignal) => Promise<T>, ms: number): Promise<T> {
+  const controller = new AbortController();
+  let timer: ReturnType<typeof setTimeout>;
+  const timeout = new Promise<never>((_, reject) => {
+    timer = setTimeout(() => {
+      controller.abort();
+      reject(new AppError("AI_TIMEOUT"));
+    }, ms);
+  });
+  return Promise.race([run(controller.signal), timeout]).finally(() => clearTimeout(timer));
+}
+
+/**
+ * Generate, then validate. Retries once (same shared deadline) when the output fails validation
+ * or is unusable, telling the model what was wrong. Other errors (timeout, rate limit, bad key) fail fast.
+ */
+async function generateValidated(
+  input: GenerateRequest,
+  context: PlanContext,
+  deadline: number,
+): Promise<PlannedItinerary> {
+  let feedback: string | undefined;
+
+  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) throw new AppError("AI_TIMEOUT");
+    if (attempt > 1 && remaining < MIN_TIME_FOR_RETRY_MS) break;
+
+    try {
+      const plan = await withTimeout((signal) => generateItinerary(input, context, { signal, feedback }), remaining);
+      const result = validateItinerary(plan, input);
+      if (result.ok) return plan;
+
+      feedback = formatIssues(result.issues);
+      console.warn(`[generate-itinerary] attempt ${attempt} failed validation: ${feedback}`);
+    } catch (err) {
+      if (classifyError(err) !== "AI_INVALID_OUTPUT") throw err;
+      feedback = "the previous answer was unusable (wrong structure, or places too far from the assigned city). Use real places inside each assigned city.";
+      console.warn(`[generate-itinerary] attempt ${attempt} produced unusable output`, err);
+    }
+  }
+  throw new AppError("AI_INVALID_OUTPUT");
+}
+
 export async function POST(req: Request) {
+  const startedAt = Date.now();
+
   const body = await req.json().catch(() => null);
   const parsed = generateRequestSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json(
-      { error: parsed.error.issues[0]?.message ?? "Invalid request" },
+      { ...errorBody("BAD_INPUT"), error: parsed.error.issues[0]?.message ?? errorBody("BAD_INPUT").error },
       { status: 400 },
     );
   }
@@ -26,11 +87,9 @@ export async function POST(req: Request) {
   // Fail fast (before paying for an LLM call) if the database isn't reachable.
   try {
     await prisma.$queryRaw`SELECT 1`;
-  } catch {
-    return NextResponse.json(
-      { error: "Can't connect to the database. Check DATABASE_URL in your .env, then run `npm run db:push`." },
-      { status: 503 },
-    );
+  } catch (err) {
+    console.error("[generate-itinerary] db check failed", err);
+    return fail("DB_UNAVAILABLE");
   }
 
   try {
@@ -40,15 +99,18 @@ export async function POST(req: Request) {
 
     // 1. Ground every city in real coordinates before the LLM runs.
     const resolved = await resolveCities(input.destinations);
-    if ("error" in resolved) return NextResponse.json({ error: resolved.error }, { status: 400 });
+    if ("error" in resolved) {
+      return NextResponse.json({ ...errorBody("BAD_INPUT"), error: resolved.error }, { status: 400 });
+    }
     const { cities } = resolved;
 
     // 2. Forecast BEFORE generation so the plan can adapt to it (best-effort, never blocks).
     const bundles = await loadForecasts(cities);
     const days = buildDayPlans(cities, bundles, startDate, input.durationDays);
 
-    // 3. Schema-enforced generation (Zod + AI SDK structured output).
-    const plan = await generateItinerary(input, { cities, days });
+    // 3. Schema-enforced generation + semantic validation, with timeout and retry.
+    //    The deadline counts from request start, so geocoding/forecast time is part of the budget.
+    const plan = await generateValidated(input, { cities, days }, startedAt + AI_BUDGET_MS);
 
     // 4. Weather summary for the saved-trips list; fall back to a fetch when the city had no geocode.
     let weatherSummary: string | null = bundles[0] ? summarizeWeather(bundles[0]) : null;
@@ -117,9 +179,8 @@ export async function POST(req: Request) {
     res.cookies.set(USER_COOKIE, userId, userCookieOptions);
     return res;
   } catch (err) {
-    console.error("[generate-itinerary]", err);
-    const message = err instanceof Error ? err.message : "Generation failed";
-    const status = /not set/.test(message) ? 503 : 500;
-    return NextResponse.json({ error: message }, { status });
+    const code = classifyError(err);
+    console.error(`[generate-itinerary] ${code}`, err);
+    return fail(code);
   }
 }

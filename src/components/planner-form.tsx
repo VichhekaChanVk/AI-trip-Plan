@@ -3,6 +3,8 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { AlertCircle, ChevronDown, Gem, Loader2, MapPin, Plus, Sparkles, X } from "lucide-react";
+import { ErrorFallback } from "@/components/ErrorFallback";
+import type { ApiError } from "@/lib/errors";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -41,7 +43,7 @@ export function PlannerForm() {
   const [startDate, setStartDate] = useState("");
   const [loading, setLoading] = useState(false);
   const [step, setStep] = useState(0);
-  const [error, setError] = useState<string | null>(null);
+  const [error, setError] = useState<ApiError | null>(null);
 
   useEffect(() => setStartDate(tomorrow()), []);
 
@@ -88,24 +90,43 @@ export function PlannerForm() {
   }
   const toggleNeed = (n: string) => setNeeds((cur) => (cur.includes(n) ? cur.filter((x) => x !== n) : [...cur, n]));
 
-  async function onSubmit(e: React.FormEvent) {
-    e.preventDefault();
+  async function generate() {
     if (loading) return;
     setError(null);
     setLoading(true);
+    // Client-side cap slightly above the server's 60s limit so a hung request can't spin forever.
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 65_000);
     try {
       const res = await fetch("/api/generate-itinerary", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ destinations: cleanCities, durationDays: days, budget, vibeTags: vibes, startDate, needs, hiddenGems, inspiration }),
+        signal: controller.signal,
       });
-      const json = await res.json().catch(() => ({}));
-      if (!res.ok) throw new Error(json.error ?? "Something went wrong. Please try again.");
+      const json = await res.json().catch(() => null);
+      if (!res.ok) {
+        setError(json?.code ? json : { error: json?.error ?? "Something went wrong. Please try again.", code: "UNKNOWN", retryable: true });
+        setLoading(false);
+        return;
+      }
       router.push(`/itinerary/${json.id}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Something went wrong.");
+      const aborted = err instanceof DOMException && err.name === "AbortError";
+      setError(
+        aborted
+          ? { error: "The AI took too long to respond. Try again, or plan fewer days.", code: "AI_TIMEOUT", retryable: true }
+          : { error: "Couldn't reach the server. Check your connection and try again.", code: "NETWORK", retryable: true },
+      );
       setLoading(false);
+    } finally {
+      clearTimeout(timer);
     }
+  }
+
+  function onSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    void generate();
   }
 
   return (
@@ -331,12 +352,7 @@ export function PlannerForm() {
           </div>
         </div>
 
-        {error && (
-          <div role="alert" className="animate-fade-up flex items-start gap-2 rounded-md border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-            <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
-            {error}
-          </div>
-        )}
+        {error && <ErrorFallback error={error} onRetry={generate} retrying={loading} />}
 
         <Button type="submit" size="lg" className="w-full" disabled={loading || !citiesValid}>
           {loading ? (
