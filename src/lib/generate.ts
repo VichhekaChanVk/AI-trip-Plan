@@ -13,6 +13,7 @@ import {
 import { describeForecast } from "./weather";
 import type { DayForecast } from "./weather";
 import { haversineKm } from "./utils";
+import { AppError } from "./errors";
 
 const openai = createOpenAI({
   apiKey: process.env.DEEPSEEK_API_KEY || process.env.OPENAI_API_KEY,
@@ -21,7 +22,7 @@ const openai = createOpenAI({
 
 function model() {
   const apiKey = process.env.DEEPSEEK_API_KEY || process.env.OPENAI_API_KEY;
-  if (!apiKey) throw new Error("AI API Key (DEEPSEEK_API_KEY or OPENAI_API_KEY) is not set");
+  if (!apiKey) throw new AppError("AI_NOT_CONFIGURED", "AI API Key (DEEPSEEK_API_KEY or OPENAI_API_KEY) is not set");
   return openai(process.env.DEEPSEEK_MODEL || process.env.OPENAI_MODEL || "deepseek-chat");
 }
 
@@ -38,6 +39,14 @@ export type CityGeo = { name: string; label: string; lat?: number; lng?: number 
 export type DayPlan = { dayNumber: number; date: string; cityIndex: number; forecast?: DayForecast };
 
 export type PlanContext = { cities: CityGeo[]; days: DayPlan[] };
+
+/** Per-call options for generateItinerary. */
+export type GenerateOptions = {
+  /** Aborts the in-flight LLM request (stops the work and the billing). */
+  signal?: AbortSignal;
+  /** Problems found in the previous attempt; shown to the model so a retry can fix them. */
+  feedback?: string;
+};
 
 export type PlannedDay = { dayNumber: number; theme: string; cityIndex: number; stops: GeneratedStop[] };
 export type PlannedItinerary = Omit<GeneratedItinerary, "days"> & { days: PlannedDay[] };
@@ -125,7 +134,11 @@ function baseLines(req: GenerateRequest) {
   ];
 }
 
-export async function generateItinerary(req: GenerateRequest, ctx: PlanContext): Promise<PlannedItinerary> {
+export async function generateItinerary(
+  req: GenerateRequest,
+  ctx: PlanContext,
+  opts: GenerateOptions = {},
+): Promise<PlannedItinerary> {
   const m = model();
   const first = ctx.cities[0];
   const multi = ctx.cities.length > 1;
@@ -140,6 +153,7 @@ export async function generateItinerary(req: GenerateRequest, ctx: PlanContext):
     schemaName: "Itinerary",
     temperature: 0.6,
     maxRetries: 2,
+    abortSignal: opts.signal,
     system: SYSTEM,
     prompt: [
       header,
@@ -148,6 +162,7 @@ export async function generateItinerary(req: GenerateRequest, ctx: PlanContext):
       ...dayLines(ctx, ctx.days),
       ...constraintLines(req, ctx, ctx.days),
       `Return exactly ${req.durationDays} days numbered 1..${req.durationDays}.`,
+      opts.feedback ? `Your previous answer was rejected for these problems. Fix every one of them: ${opts.feedback}` : "",
     ]
       .filter(Boolean)
       .join("\n"),
@@ -189,7 +204,7 @@ export async function generateDay(
 
   const anchor = anchorOf(city, undefined);
   const stops = cleanStops(object.stops, anchor);
-  if (stops.length === 0) throw new Error("The model returned no usable stops for that day. Try again.");
+  if (stops.length === 0) throw new AppError("AI_INVALID_OUTPUT", "The model returned no usable stops for that day. Try again.");
   return { dayNumber: day.dayNumber, theme: object.theme, cityIndex: day.cityIndex, stops };
 }
 
@@ -277,7 +292,7 @@ function sanitize(raw: GeneratedItinerary, req: GenerateRequest, ctx: PlanContex
     })
     .filter((d) => d.stops.length > 0);
 
-  if (days.length === 0) throw new Error("The model returned no usable stops. Try again or rephrase the destination.");
+  if (days.length === 0) throw new AppError("AI_INVALID_OUTPUT", "The model returned no usable stops. Try again or rephrase the destination.");
 
   return {
     ...raw,
