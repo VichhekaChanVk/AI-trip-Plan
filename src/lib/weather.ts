@@ -23,10 +23,17 @@ export type DayForecast = {
   precipChance: number; // 0-100
 };
 
+export type AlertSeverity = "info" | "warning" | "danger";
+
+export type Alert = {
+  text: string;
+  severity: AlertSeverity;
+};
+
 export type WeatherBundle = {
   current: CurrentWeather;
   forecast: DayForecast[];
-  alerts: string[];
+  alerts: Alert[];
 };
 
 /** Open-Meteo always works; kept so callers don't need to special-case it. */
@@ -109,11 +116,51 @@ export async function getWeather(lat: number, lng: number): Promise<WeatherBundl
     };
   });
 
-  const alerts: string[] = [];
-  const rainy = forecast.filter((d) => d.precipChance >= 60).slice(0, 5);
-  if (rainy.length) alerts.push(`Rain likely on ${rainy.map((d) => d.date.slice(5)).join(", ")} - pack an umbrella.`);
-  if (forecast.some((d) => d.highC >= 33)) alerts.push("High heat expected - plan outdoor stops early and stay hydrated.");
-  if (forecast.some((d) => d.lowC <= 0)) alerts.push("Freezing temperatures expected - dress in layers.");
+  const alerts: Alert[] = [];
+
+  // ── Thunderstorm (WMO 95-99) ──
+  if (j.current.weather_code >= 95) {
+    alerts.push({ text: "Thunderstorm happening right now — seek indoor shelter immediately.", severity: "danger" });
+  } else {
+    const stormDays = forecast.filter((d) => d.icon === "thunder").slice(0, 5);
+    if (stormDays.length) {
+      alerts.push({
+        text: `Thunderstorms expected on ${stormDays.map((d) => d.date.slice(5)).join(", ")} — check your outdoor plans.`,
+        severity: "warning",
+      });
+    }
+  }
+
+  // ── High winds ──
+  if (j.current.wind_speed_10m > 60) {
+    alerts.push({ text: `Strong winds ${Math.round(j.current.wind_speed_10m)} km/h right now — avoid open or elevated areas.`, severity: "danger" });
+  } else if (j.current.wind_speed_10m > 40) {
+    alerts.push({ text: `Gusty winds ${Math.round(j.current.wind_speed_10m)} km/h today — take care outdoors.`, severity: "warning" });
+  }
+
+  // ── Heavy rain ──
+  const rainy = forecast.filter((d) => d.precipChance >= 70).slice(0, 5);
+  if (rainy.length) {
+    alerts.push({ text: `Heavy rain likely on ${rainy.map((d) => d.date.slice(5)).join(", ")} — pack a waterproof layer.`, severity: "warning" });
+  } else {
+    const lightRain = forecast.filter((d) => d.precipChance >= 50).slice(0, 5);
+    if (lightRain.length) alerts.push({ text: `Rain possible on ${lightRain.map((d) => d.date.slice(5)).join(", ")} — pack an umbrella.`, severity: "info" });
+  }
+
+  // ── Heat ──
+  if (forecast.some((d) => d.highC >= 38)) {
+    alerts.push({ text: "Extreme heat warning — limit outdoor exposure between 11am–4pm and stay hydrated.", severity: "danger" });
+  } else if (forecast.some((d) => d.highC >= 33)) {
+    alerts.push({ text: "High heat expected — plan outdoor stops for early morning or evening.", severity: "warning" });
+  }
+
+  // ── Snow / freeze ──
+  const snowDays = forecast.filter((d) => d.icon === "snow" && d.precipChance >= 50);
+  if (snowDays.length) {
+    alerts.push({ text: `Snowfall expected on ${snowDays.slice(0, 3).map((d) => d.date.slice(5)).join(", ")} — check transport links.`, severity: "warning" });
+  } else if (forecast.some((d) => d.lowC <= 0)) {
+    alerts.push({ text: "Freezing temperatures expected — dress in layers and watch for ice.", severity: "info" });
+  }
 
   const c = decode(j.current.weather_code);
   return {
