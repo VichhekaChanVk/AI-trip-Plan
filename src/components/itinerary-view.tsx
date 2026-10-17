@@ -133,6 +133,7 @@ export function ItineraryView({
               lat={cityMeta?.lat ?? trip.centerLat}
               lng={cityMeta?.lng ?? trip.centerLng}
               selectedDate={dayDate}
+              place={dayCity ?? trip.destination}
             />
 
             <Tabs value={String(day)} onValueChange={changeDay}>
