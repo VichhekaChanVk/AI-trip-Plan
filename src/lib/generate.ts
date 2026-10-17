@@ -64,6 +64,7 @@ const SYSTEM = [
   "- transitNote must state mode and duration from the previous stop, e.g. 'Metro, 12 min' or 'Walk, 8 min'.",
   "- indoor=true only if the stop is mainly under a roof (museum, mall, covered market, restaurant, cafe, spa); otherwise false.",
   "- Vary days: do not repeat places; give each day a distinct theme.",
+  "- Category diversity: at most 2 stops of the same categoryTag per day (e.g. at most 2 'food' stops, at most 2 'culture' stops).",
   "- Every HARD CONSTRAINT in the prompt must be followed exactly. They override variety and vibe.",
 ].join("\n");
 
@@ -131,6 +132,9 @@ function baseLines(req: GenerateRequest) {
     `Budget: ${BUDGET_LABEL[req.budget]} - ${BUDGET_GUIDE[req.budget]}`,
     `Interests/vibe: ${req.vibeTags.length ? req.vibeTags.join(", ") : "balanced mix of highlights"}.`,
     req.vibeTags.includes("Walkable") ? "Keep each day geographically compact; prefer walking between stops." : "",
+    req.vibeTags.includes("Coffee & Cafes")
+      ? "Coffee & Cafes vibe: include exactly 1-2 cafe/coffee stops per day (not more). Fill remaining stops with other activities (food, culture, sights, etc.)."
+      : "",
   ];
 }
 

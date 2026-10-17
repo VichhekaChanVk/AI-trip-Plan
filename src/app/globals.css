@@ -21,6 +21,35 @@
     --ring: 160 84% 39%;
   }
 
+  .dark {
+    /* ── Deep space navy ── not just black, has blue character */
+    --background: 230 40% 5%;          /* #090c1a */
+    --foreground: 213 28% 92%;         /* #dce9f5 */
+
+    /* Cards float above background */
+    --card: 230 36% 9%;                /* #0f1322 */
+    --card-foreground: 213 28% 92%;
+
+    --primary: 213 28% 92%;
+    --primary-foreground: 230 40% 5%;
+
+    /* Electric emerald — brighter on dark bg */
+    --accent: 158 82% 46%;             /* #14d47e */
+    --accent-foreground: 230 40% 5%;
+
+    /* Muted interactive surfaces */
+    --muted: 230 36% 13%;              /* #181d2f */
+    --muted-foreground: 215 18% 58%;   /* #7f96b0 */
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 100%;
+
+    /* Borders: visible but not stark */
+    --border: 230 32% 18%;             /* #1d2338 */
+    --input: 230 36% 11%;              /* #131727 */
+    --ring: 158 82% 46%;
+  }
+
   * {
     @apply border-border;
   }
@@ -29,6 +58,15 @@
   }
   body {
     @apply bg-background text-foreground font-sans;
+  }
+
+  /* Subtle radial glow at top of page in dark mode — depth without noise */
+  .dark body {
+    background-image: radial-gradient(
+      ellipse 130% 45% at 50% -5%,
+      hsl(230 80% 12% / 0.7) 0%,
+      transparent 70%
+    );
   }
 }
 
