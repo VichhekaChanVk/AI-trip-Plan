@@ -19,7 +19,7 @@ const config: Config = {
         ring: "hsl(var(--ring))",
       },
       borderRadius: { lg: "0.75rem", md: "0.5rem", sm: "0.375rem" },
-      fontFamily: { sans: ["var(--font-inter)", "ui-sans-serif", "system-ui", "sans-serif"] },
+      fontFamily: { sans: ["var(--font-sans)", "ui-sans-serif", "system-ui", "sans-serif"] },
     },
   },
   plugins: [animate],

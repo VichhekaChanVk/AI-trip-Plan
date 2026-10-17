@@ -7,6 +7,7 @@ import { ErrorFallback } from "@/components/ErrorFallback";
 import type { ApiError } from "@/lib/errors";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
+import { DatePicker } from "@/components/date-picker";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import { BUDGETS, BUDGET_LABEL, MAX_CITIES, MAX_NOTES, MAX_VIBES, NEEDS, VIBES, cleanVibe, type Budget } from "@/lib/schema";
@@ -38,6 +39,7 @@ export function PlannerForm() {
   const [inspiration, setInspiration] = useState("");
   const [notesOpen, setNotesOpen] = useState(false);
   const [days, setDays] = useState(3);
+  const [daysInput, setDaysInput] = useState("3");
   const [budget, setBudget] = useState<Budget>("BALANCED");
   const [vibes, setVibes] = useState<string[]>([]);
   const [startDate, setStartDate] = useState("");
@@ -53,6 +55,11 @@ export function PlannerForm() {
     const t = setInterval(() => setStep((s) => Math.min(s + 1, STEPS.length - 1)), 5000);
     return () => clearInterval(t);
   }, [loading]);
+
+  // Keep daysInput in sync when days changes externally (e.g. addCity bumps the minimum).
+  useEffect(() => {
+    setDaysInput(String(days));
+  }, [days]);
 
   const [customVibe, setCustomVibe] = useState("");
   const atLimit = vibes.length >= MAX_VIBES;
@@ -170,6 +177,8 @@ export function PlannerForm() {
           )}
         </fieldset>
 
+        <hr className="border-border" />
+
         <div className="grid gap-4 sm:grid-cols-6">
           <div className="sm:col-span-2">
             <label htmlFor="days" className="mb-1.5 block text-sm font-medium">
@@ -180,8 +189,14 @@ export function PlannerForm() {
               type="number"
               min={cityCount}
               max={10}
-              value={days}
-              onChange={(e) => setDays(Math.max(cityCount, Math.min(10, Number(e.target.value) || 1)))}
+              value={daysInput}
+              onChange={(e) => {
+                const raw = e.target.value;
+                setDaysInput(raw);
+                const n = parseInt(raw, 10);
+                if (!isNaN(n)) setDays(Math.max(cityCount, Math.min(10, n)));
+              }}
+              onBlur={() => setDaysInput(String(days))}
               disabled={loading}
             />
             {cityCount > 1 && <p className="mt-1 text-xs text-muted-foreground">Split across your {cityCount} cities.</p>}
@@ -190,9 +205,11 @@ export function PlannerForm() {
             <label htmlFor="start" className="mb-1.5 block text-sm font-medium">
               Start date
             </label>
-            <Input id="start" type="date" value={startDate} onChange={(e) => setStartDate(e.target.value)} disabled={loading} />
+            <DatePicker id="start" value={startDate} onChange={setStartDate} disabled={loading} />
           </div>
         </div>
+
+        <hr className="border-border" />
 
         <fieldset>
           <legend className="mb-1.5 text-sm font-medium">Budget</legend>
@@ -210,13 +227,15 @@ export function PlannerForm() {
                 )}
               >
                 <span className="block text-sm font-semibold">{BUDGET_LABEL[b]}</span>
-                <span className={cn("hidden text-xs sm:block", budget === b ? "text-slate-300" : "text-muted-foreground")}>
+                <span className={cn("hidden text-xs sm:block", budget === b ? "text-primary-foreground/70" : "text-muted-foreground")}>
                   {BUDGET_HINT[b]}
                 </span>
               </button>
             ))}
           </div>
         </fieldset>
+
+        <hr className="border-border" />
 
         <fieldset>
           <legend className="mb-1.5 flex w-full items-baseline justify-between text-sm font-medium">
@@ -267,6 +286,8 @@ export function PlannerForm() {
             </Button>
           </div>
         </fieldset>
+
+        <hr className="border-border" />
 
         <fieldset>
           <legend className="mb-1.5 text-sm font-medium">
@@ -343,7 +364,7 @@ export function PlannerForm() {
                 maxLength={MAX_NOTES}
                 aria-label="Pasted notes or caption"
                 placeholder="e.g. 'Must try the matcha at Nakamura Tokichi, sunrise at Fushimi Inari…'"
-                className="mt-2 w-full rounded-md border bg-card px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
+                className="mt-2 w-full resize-none rounded-md border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50"
               />
               <p className="text-right text-xs text-muted-foreground">
                 {inspiration.length}/{MAX_NOTES}
